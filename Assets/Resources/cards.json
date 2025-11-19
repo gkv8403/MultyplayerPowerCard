@@ -1,0 +1,88 @@
+{
+  "cards": [
+    {
+      "id": 1,
+      "name": "Shield Bearer",
+      "cost": 2,
+      "power": 3,
+      "abilities": ["BlockNextAttack"]
+    },
+    {
+      "id": 2,
+      "name": "Swift Blade",
+      "cost": 1,
+      "power": 2,
+      "abilities": ["DrawExtraCard"]
+    },
+    {
+      "id": 3,
+      "name": "Power Strike",
+      "cost": 3,
+      "power": 5,
+      "abilities": ["DoublePower"]
+    },
+    {
+      "id": 4,
+      "name": "Thief",
+      "cost": 2,
+      "power": 2,
+      "abilities": ["StealPoints"]
+    },
+    {
+      "id": 5,
+      "name": "Guardian",
+      "cost": 1,
+      "power": 1,
+      "abilities": ["GainPoints"]
+    },
+    {
+      "id": 6,
+      "name": "Warrior",
+      "cost": 2,
+      "power": 4,
+      "abilities": []
+    },
+    {
+      "id": 7,
+      "name": "Mage",
+      "cost": 3,
+      "power": 3,
+      "abilities": ["GainPoints"]
+    },
+    {
+      "id": 8,
+      "name": "Assassin",
+      "cost": 4,
+      "power": 6,
+      "abilities": ["StealPoints"]
+    },
+    {
+      "id": 9,
+      "name": "Berserker",
+      "cost": 3,
+      "power": 7,
+      "abilities": ["DoublePower"]
+    },
+    {
+      "id": 10,
+      "name": "Healer",
+      "cost": 2,
+      "power": 1,
+      "abilities": ["GainPoints"]
+    },
+    {
+      "id": 11,
+      "name": "Scout",
+      "cost": 1,
+      "power": 1,
+      "abilities": ["DrawExtraCard"]
+    },
+    {
+      "id": 12,
+      "name": "Defender",
+      "cost": 3,
+      "power": 4,
+      "abilities": ["BlockNextAttack"]
+    }
+  ]
+}
