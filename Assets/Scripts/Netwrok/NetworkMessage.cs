@@ -4,6 +4,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Network message types for game communication
 /// All messages are JSON serializable
+/// UPDATED: Added timer sync, validation error, and energy fields
 /// </summary>
 
 // ==================== BASE MESSAGE ====================
@@ -25,6 +26,7 @@ public class StartGameMessage : NetworkMessage
     public string hostPlayerName;
     public string clientPlayerName;
     public int seed;
+
     public StartGameMessage()
     {
         messageType = "StartGame";
@@ -39,6 +41,7 @@ public class TurnStartMessage : NetworkMessage
     public int turnNumber;
     public int hostEnergy;
     public int clientEnergy;
+    public float timeRemaining; // NEW: Send initial timer value
 
     public TurnStartMessage()
     {
@@ -47,13 +50,16 @@ public class TurnStartMessage : NetworkMessage
 }
 
 /// <summary>
-/// NEW: Host broadcasts this after ability resolution to sync scores and played cards.
+/// Host broadcasts this after ability resolution to sync scores and played cards.
+/// UPDATED: Now includes energy values
 /// </summary>
 [Serializable]
 public class TurnResolvedMessage : NetworkMessage
 {
     public int hostScore;
     public int clientScore;
+    public int hostEnergy; // NEW: Energy after resolution
+    public int clientEnergy; // NEW: Energy after resolution
     public List<int> hostPlayedCards;
     public List<int> clientPlayedCards;
 
@@ -72,6 +78,7 @@ public class PlayCardsMessage : NetworkMessage
 {
     public List<int> cardIds; // IDs of cards being played
     public string playerName;
+    public int submitSequence; // NEW: Prevent double submits
 
     public PlayCardsMessage()
     {
@@ -80,10 +87,43 @@ public class PlayCardsMessage : NetworkMessage
     }
 }
 
+// ==================== TIMER SYNC MESSAGE ====================
+
+/// <summary>
+/// NEW: Host sends this every 2 seconds to keep client timer in sync
+/// </summary>
+[Serializable]
+public class TimerSyncMessage : NetworkMessage
+{
+    public float timeRemaining;
+
+    public TimerSyncMessage()
+    {
+        messageType = "TimerSync";
+    }
+}
+
+// ==================== VALIDATION ERROR MESSAGE ====================
+
+/// <summary>
+/// NEW: Host sends this when client's card play is invalid
+/// </summary>
+[Serializable]
+public class ValidationErrorMessage : NetworkMessage
+{
+    public string playerName;
+    public string errorMessage;
+
+    public ValidationErrorMessage()
+    {
+        messageType = "ValidationError";
+    }
+}
+
 // ==================== GAME OVER MESSAGE ====================
 
 /// <summary>
-/// NEW: Host broadcasts this when the game ends.
+/// Host broadcasts this when the game ends.
 /// </summary>
 [Serializable]
 public class GameEndMessage : NetworkMessage
