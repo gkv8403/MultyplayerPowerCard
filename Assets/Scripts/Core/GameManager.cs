@@ -6,13 +6,14 @@ using System.Linq;
 
 /// <summary>
 /// Main game manager - handles game flow and state
+/// FIXED: Game continues until disconnect, not turn limit
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
     [Header("Game Settings")]
-    public int maxTurns = 6;
+    public int maxTurns = 999; // CHANGED: Set to 999 to effectively remove limit
     public float turnTimeLimit = 30f;
     public float revealDuration = 3f; // Time to show revealed cards
 
@@ -28,6 +29,9 @@ public class GameManager : MonoBehaviour
     [Header("Players")]
     public PlayerState hostPlayer;
     public PlayerState clientPlayer;
+
+    [Header("Game End Settings")]
+    public bool endOnDeckEmpty = false; // Optional: end when both decks empty
 
     private bool isGameStarted = false;
     private bool isResolvingTurn = false;
@@ -73,6 +77,7 @@ public class GameManager : MonoBehaviour
         Debug.Log("=== STARTING MATCH ===");
         SetPhase(GamePhase.Setup);
 
+        // Initialize decks with same seed for both players
         hostPlayer.InitializeDeck(12);
         clientPlayer.InitializeDeck(12);
 
@@ -96,16 +101,13 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (CheckForGameEnd())
-        {
-            EndGame();
-            return;
-        }
+        // REMOVED: Turn limit check - game continues until disconnect
+        // if (CheckForGameEnd()) { EndGame(); return; }
 
         turnManager.IncrementTurn();
         currentTurn = turnManager.currentTurn;
 
-        Debug.Log($"=== STARTING TURN {currentTurn}/{maxTurns} ===");
+        Debug.Log($"=== STARTING TURN {currentTurn} ===");
 
         SetPhase(GamePhase.TurnStart);
 
@@ -129,8 +131,12 @@ public class GameManager : MonoBehaviour
         SetPhase(GamePhase.CardSelection);
         GameEvents.TriggerCardSelectionStart();
 
-        // Start timer
-        turnManager.StartTimer();
+        // Start timer (HOST ONLY in networked game)
+        bool isHost = NetworkGameManager.Instance != null && NetworkGameManager.Instance.isHost;
+        if (isHost || NetworkGameManager.Instance == null)
+        {
+            turnManager.StartTimer();
+        }
 
         Debug.Log($"Turn {currentTurn} started. Host Energy: {hostPlayer.energy}, Client Energy: {clientPlayer.energy}");
     }
@@ -178,15 +184,22 @@ public class GameManager : MonoBehaviour
         // Wait for reveal duration
         yield return new WaitForSeconds(revealDuration);
 
-        // Phase 2: Resolution
-        SetPhase(GamePhase.Resolution);
-        GameEvents.TriggerTurnResolved();
+        // Phase 2: Resolution (HOST ONLY in networked game)
+        bool isHost = NetworkGameManager.Instance != null && NetworkGameManager.Instance.isHost;
+        if (isHost || NetworkGameManager.Instance == null)
+        {
+            SetPhase(GamePhase.Resolution);
+            GameEvents.TriggerTurnResolved();
 
-        Debug.Log($"Pre-Resolution Scores - Host: {hostPlayer.score}, Client: {clientPlayer.score}");
+            Debug.Log($"Pre-Resolution Scores - Host: {hostPlayer.score}, Client: {clientPlayer.score}");
+            Debug.Log($"Pre-Resolution Energy - Host: {hostPlayer.energy}, Client: {clientPlayer.energy}");
 
-        abilityResolver.ResolveAllAbilities(hostPlayer, clientPlayer);
+            // Run ability resolution
+            abilityResolver.ResolveAllAbilities(hostPlayer, clientPlayer);
 
-        Debug.Log($"Post-Resolution Scores - Host: {hostPlayer.score}, Client: {clientPlayer.score}");
+            Debug.Log($"Post-Resolution Scores - Host: {hostPlayer.score}, Client: {clientPlayer.score}");
+            Debug.Log($"Post-Resolution Energy - Host: {hostPlayer.energy}, Client: {clientPlayer.energy}");
+        }
 
         // Phase 3: Turn End
         SetPhase(GamePhase.TurnEnd);
@@ -197,16 +210,21 @@ public class GameManager : MonoBehaviour
         // Reset flag
         isResolvingTurn = false;
 
-        // Check if game should end
-        if (CheckForGameEnd())
-        {
-            EndGame();
-        }
+        // NOTE: Game end check is now handled by NetworkGameManager
+        // Game will only end on disconnect or deck exhaustion
     }
 
     public void OnTurnTimerExpired()
     {
         Debug.Log("⏱️ GameManager: Timer expired!");
+
+        // Only HOST should process timer expiry in networked game
+        bool isHost = NetworkGameManager.Instance != null && NetworkGameManager.Instance.isHost;
+        if (!isHost && NetworkGameManager.Instance != null)
+        {
+            Debug.Log("CLIENT: Ignoring timer expiry, waiting for host");
+            return;
+        }
 
         // Force submit for players who haven't submitted
         if (!hostPlayer.hasSubmittedCards)
@@ -230,11 +248,26 @@ public class GameManager : MonoBehaviour
         Debug.Log($"--- Phase Changed: {newPhase.GetPhaseName()} ---");
     }
 
+    /// <summary>
+    /// CHANGED: Only check for deck empty if enabled, otherwise return false
+    /// Game ends by NetworkGameManager checking for disconnects
+    /// </summary>
     public bool CheckForGameEnd()
     {
-        bool shouldEnd = currentTurn >= maxTurns;
-        Debug.Log($"CheckForGameEnd: Turn {currentTurn}/{maxTurns}, Should End: {shouldEnd}");
-        return shouldEnd;
+        if (endOnDeckEmpty)
+        {
+            bool hostDeckEmpty = hostPlayer.deck.IsEmpty;
+            bool clientDeckEmpty = clientPlayer.deck.IsEmpty;
+
+            if (hostDeckEmpty && clientDeckEmpty)
+            {
+                Debug.Log("Both decks empty, game should end");
+                return true;
+            }
+        }
+
+        // Game continues indefinitely until disconnect
+        return false;
     }
 
     public void EndGame()
@@ -244,6 +277,7 @@ public class GameManager : MonoBehaviour
         SetPhase(GamePhase.GameOver);
         turnManager.StopTimer();
 
+        // Calculate winner based on current scores
         string winnerName = "Tie";
         if (hostPlayer.score > clientPlayer.score)
         {
@@ -258,8 +292,9 @@ public class GameManager : MonoBehaviour
 
         GameEvents.TriggerGameEnd(winnerName, hostPlayer.score, clientPlayer.score);
 
-        // Send to network
-        if (NetworkGameManager.Instance != null)
+        // Send to network (HOST ONLY)
+        bool isHost = NetworkGameManager.Instance != null && NetworkGameManager.Instance.isHost;
+        if (isHost)
         {
             NetworkGameManager.Instance.SendGameEndMessage(winnerName, hostPlayer.score, clientPlayer.score);
         }
@@ -305,5 +340,14 @@ public class GameManager : MonoBehaviour
         {
             Debug.Log($"✅ {player.playerName} submitted cards successfully");
         }
+    }
+
+    /// <summary>
+    /// NEW: Force end game (for manual forfeit or disconnect)
+    /// </summary>
+    public void ForceEndGame(string reason)
+    {
+        Debug.Log($"⚠️ Force ending game: {reason}");
+        EndGame();
     }
 }
